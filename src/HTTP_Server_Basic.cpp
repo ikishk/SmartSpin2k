@@ -50,8 +50,8 @@ void startWifi() {
   SS2K_LOG(HTTP_SERVER_LOG_TAG, "Connecting to: %s", userConfig.getSsid());
   if (String(WiFi.SSID()) != userConfig.getSsid()) {
     WiFi.mode(WIFI_STA);
-    WiFi.setTxPower(WIFI_POWER_19_5dBm);
     WiFi.begin(userConfig.getSsid(), userConfig.getPassword());
+    WiFi.setTxPower(WIFI_POWER_19_5dBm);
     WiFi.setAutoReconnect(true);
   }
 
@@ -465,8 +465,14 @@ void HTTP_Server::settingsProcessor() {
   }
   if (!server.arg("maxWatts").isEmpty()) {
     uint64_t maxWatts = server.arg("maxWatts").toInt();
-    if (maxWatts >= 300 && maxWatts <= 2000) {
+    if (maxWatts >= 0 && maxWatts <= 2000) {
       userConfig.setMaxWatts(maxWatts);
+    }
+  }
+  if (!server.arg("minWatts").isEmpty()) {
+    uint64_t minWatts = server.arg("minWatts").toInt();
+    if (minWatts >= 0 && minWatts <= 200) {
+      userConfig.setMinWatts(minWatts);
     }
   }
   if (!server.arg("ERGSensitivity").isEmpty()) {
@@ -632,9 +638,9 @@ void HTTP_Server::FirmwareUpdate() {
       SS2K_LOG(HTTP_SERVER_LOG_TAG, "Updating FileSystem");
       http.begin(DATA_UPDATEURL + String(DATA_FILELIST),
                  rootCACertificate);  // check version URL
-      delay(100);
+      vTaskDelay(100 / portTICK_PERIOD_MS);
       httpCode = http.GET();  // get data from version file
-      delay(100);
+      vTaskDelay(100 / portTICK_PERIOD_MS);
       StaticJsonDocument<500> doc;
       if (httpCode == HTTP_CODE_OK) {  // if version received
         String payload;
@@ -657,29 +663,31 @@ void HTTP_Server::FirmwareUpdate() {
         String fileName = "/" + v.as<String>();
         http.begin(DATA_UPDATEURL + fileName,
                    rootCACertificate);  // check version URL
-        delay(100);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
         httpCode = http.GET();
-        delay(100);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
         if (httpCode == HTTP_CODE_OK) {
           String payload;
           payload = http.getString();
           payload.trim();
           LittleFS.remove(fileName);
-          File file = LittleFS.open(fileName, FILE_WRITE);
+          File file = LittleFS.open(fileName, FILE_WRITE, true);
           if (!file) {
             SS2K_LOG(HTTP_SERVER_LOG_TAG, "Failed to create file, %s", fileName);
             return;
           }
           file.print(payload);
           file.close();
+          SS2K_LOG(HTTP_SERVER_LOG_TAG, "Created: %s", fileName);
           httpServer.internetConnection = true;
         } else {
-          SS2K_LOG(HTTP_SERVER_LOG_TAG, "error downloading %s %d", fileName, httpCode);
+          SS2K_LOG(HTTP_SERVER_LOG_TAG, "Error downloading %s %d", fileName, httpCode);
           httpServer.internetConnection = false;
         }
       }
 
       //////// Update Firmware /////////
+      SS2K_LOG(HTTP_SERVER_LOG_TAG, "Updating Firmware...Please Wait");
       if ((availiableVer > currentVer) && (userConfig.getAutoUpdate())) {
         t_httpUpdate_return ret = httpUpdate.update(client, userConfig.getFirmwareUpdateURL() + String(FW_BINFILE));
         switch (ret) {
