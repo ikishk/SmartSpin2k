@@ -15,6 +15,7 @@
 #include "ERG_Mode.h"
 #include "UdpAppender.h"
 #include "WebsocketAppender.h"
+#include "aux_serial.h"
 
 HardwareSerial stepperSerial(2);
 TMC2208Stepper driver(&SERIAL_PORT, R_SENSE);  // Hardware Serial
